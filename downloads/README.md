@@ -1,7 +1,7 @@
-# Relay web test
+# Baseline web test
 
-Download [relay-web-test.zip](./relay-web-test.zip), extract it, and open `index.html` in Chrome or Edge.
+[baemin-baseline.zip](./baemin-baseline.zip) contains the current Baseline HTML and instructions. The static build embeds scripts, styles, and the favicon.
 
-This bundle includes the application, styles, and favicon. It contains no live API integration. Chat, agents, files, and the terminal are simulated.
+This is a mock mobile prototype. It has no login, payment, delivery, or support backend. Original screenshots were not supplied; see [BASELINE.md](../BASELINE.md) for fidelity assumptions.
 
-The static build was verified over HTTP in Chromium. Browser policies can restrict opening local HTML files; if that happens, serve `index.html` using a static web server or GitHub Pages.
+The generated HTML was validated over HTTP in Chromium. Local HTML access depends on browser policy. For web access, publish `docs/index.html` using a static hosting provider.
