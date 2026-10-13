@@ -1,0 +1,122 @@
+import { expect, test } from '@playwright/test'
+
+test.beforeEach(async ({ page }) => { await page.goto('/') })
+
+test('desktop workspace renders without browser errors or document overflow', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Orbit Web Workspace' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Agent panel' })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Terminal panel' })).toBeVisible()
+  expect(await page.evaluate(() => ({ horizontal: document.documentElement.scrollWidth > innerWidth, vertical: document.documentElement.scrollHeight > innerHeight }))).toEqual({ horizontal: false, vertical: false })
+  expect(errors).toEqual([])
+  await page.screenshot({ path: 'artifacts/relay-desktop.png', fullPage: true })
+})
+
+test('layout panels collapse and restore', async ({ page }) => {
+  await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible()
+  await page.getByRole('button', { name: 'Expand sidebar' }).click()
+  await page.getByRole('button', { name: 'Toggle terminal panel', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Terminal panel' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Toggle terminal panel', exact: true }).click()
+  await expect(page.getByRole('region', { name: 'Terminal panel' })).toBeVisible()
+  await page.getByRole('button', { name: 'Close agent panel' }).click()
+  await expect(page.getByRole('complementary', { name: 'Agent panel' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Toggle agent panel' }).click()
+  await expect(page.getByRole('complementary', { name: 'Agent panel' })).toBeVisible()
+})
+
+test('chat response is scoped to its project even when switching during generation', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Chat message' }).fill('Help me plan a test')
+  await page.getByRole('button', { name: 'Send message' }).click()
+  await page.getByRole('combobox', { name: 'Select project' }).selectOption('atlas')
+  await expect(page.getByText('Welcome to Atlas API.', { exact: false })).toBeVisible()
+  await expect(page.getByText('Help me plan a test', { exact: true })).toHaveCount(0)
+  await page.getByRole('combobox', { name: 'Select project' }).selectOption('orbit')
+  await expect(page.getByText('Here’s a test plan:', { exact: false })).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Agent is preparing a response' })).toHaveCount(0)
+})
+
+test('agent selection, pause, blocked response, and resume work', async ({ page }) => {
+  await page.getByRole('button', { name: 'Select Pixel', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Chat agent' })).toHaveValue('pixel')
+  await page.getByRole('combobox', { name: 'Pixel status' }).selectOption('paused')
+  await page.getByRole('textbox', { name: 'Chat message' }).fill('Hello Pixel')
+  await page.getByRole('textbox', { name: 'Chat message' }).press('Enter')
+  await expect(page.getByText('Pixel is paused. Resume this agent', { exact: false })).toBeVisible()
+  await page.getByRole('button', { name: 'Resume agent', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Pixel status' })).toHaveValue('working')
+  await page.getByRole('textbox', { name: 'Chat message' }).fill('Hello again')
+  await page.getByRole('button', { name: 'Send message' }).click()
+  await expect(page.getByText('Hello! I’m Pixel', { exact: false })).toBeVisible()
+})
+
+test('task completion changes progress and is reversible', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Tasks' }).click()
+  await page.getByRole('button', { name: 'Mark Build the dashboard components complete', exact: true }).click()
+  await expect(page.getByText('3 of 4 tasks completed', { exact: true })).toBeVisible()
+  await expect(page.getByText('75%', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Mark Build the dashboard components incomplete', exact: true }).click()
+  await expect(page.getByText('2 of 4 tasks completed', { exact: true })).toBeVisible()
+})
+
+test('files are searchable and show mock content', async ({ page }) => {
+  await page.getByRole('tab', { name: 'Files' }).click()
+  await page.getByRole('textbox', { name: 'Search files' }).fill('tokens')
+  await page.getByRole('button', { name: 'src/styles/tokens.css', exact: true }).click()
+  await expect(page.getByRole('table', { name: 'Contents of src/styles/tokens.css' })).toContainText('--accent: #a9e7c3')
+  await page.getByRole('textbox', { name: 'Search files' }).fill('missing-file')
+  await expect(page.getByText('No matching files')).toBeVisible()
+})
+
+test('project creation validates duplicate names and opens a new chat', async ({ page }) => {
+  await page.getByRole('button', { name: 'Projects', exact: true }).click()
+  await page.getByRole('button', { name: 'New project', exact: true }).last().click()
+  await page.getByRole('textbox', { name: 'Project name' }).fill('Orbit Web')
+  await page.getByRole('dialog', { name: 'A new place to build' }).getByRole('button', { name: 'Create project', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('already exists')
+  await page.getByRole('textbox', { name: 'Project name' }).fill('Lighthouse')
+  await page.getByRole('dialog', { name: 'A new place to build' }).getByRole('button', { name: 'Create project', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Lighthouse Workspace' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'What are we building today?' })).toBeVisible()
+})
+
+test('skills, management pages, and persisted preferences work', async ({ page }) => {
+  await page.getByRole('button', { name: 'Agents', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'The team' })).toBeVisible()
+  await page.getByRole('combobox', { name: 'Manage Sage status' }).selectOption('working')
+  await page.getByRole('button', { name: 'Skills', exact: true }).click()
+  await page.getByRole('switch', { name: 'Enable Project research' }).click()
+  await expect(page.getByRole('switch', { name: 'Enable Project research' })).toBeChecked()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await page.getByRole('switch', { name: 'Compact density' }).click()
+  await page.getByRole('switch', { name: 'Message timestamps' }).click()
+  await page.reload()
+  await page.getByRole('button', { name: 'Settings', exact: true }).click()
+  await expect(page.getByRole('switch', { name: 'Compact density' })).toBeChecked()
+  await expect(page.getByRole('switch', { name: 'Message timestamps' })).not.toBeChecked()
+})
+
+test('terminal commands, logs, and command palette function', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Terminal command' }).fill('status')
+  await page.getByRole('textbox', { name: 'Terminal command' }).press('Enter')
+  await expect(page.getByText('Nova: working  |  Pixel: working  |  Sage: idle', { exact: true })).toBeVisible()
+  await page.getByRole('tab', { name: 'Logs' }).click()
+  await expect(page.getByText('Simulated terminal command: status', { exact: true })).toBeVisible()
+  await page.keyboard.press('Control+k')
+  await page.getByRole('textbox', { name: 'Quick search' }).fill('Atlas')
+  await page.getByRole('button', { name: 'Atlas API Project' }).click()
+  await expect(page.getByRole('heading', { name: 'Atlas API Workspace' })).toBeVisible()
+})
+
+test('narrow screens remain usable without document overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('button', { name: 'Close agent panel' }).click()
+  await expect(page.getByRole('textbox', { name: 'Chat message' })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await page.getByRole('button', { name: 'Toggle agent panel' }).click()
+  await expect(page.getByRole('combobox', { name: 'Nova status' })).toBeVisible()
+  await page.screenshot({ path: 'artifacts/relay-narrow.png', fullPage: true })
+})
